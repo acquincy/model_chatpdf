@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, FileText, Loader2, CheckCircle, Upload } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
 import Markdown from 'react-markdown';
 
 interface ChatViewProps {
@@ -19,7 +18,6 @@ export function ChatView({ file, onBack }: ChatViewProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [base64Data, setBase64Data] = useState<string>('');
   
   // New state for upload flow
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
@@ -28,15 +26,6 @@ export function ChatView({ file, onBack }: ChatViewProps) {
   useEffect(() => {
     const url = URL.createObjectURL(file);
     setPdfUrl(url);
-    
-    // Convert file to base64 for Gemini API
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64 = (reader.result as string).split(',')[1];
-      setBase64Data(base64);
-    };
-    reader.readAsDataURL(file);
-
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
@@ -74,7 +63,7 @@ export function ChatView({ file, onBack }: ChatViewProps) {
   };
 
   const handleSend = async () => {
-    if (!input.trim() || !base64Data) return;
+    if (!input.trim()) return;
 
     const userMessage = input.trim();
     setInput('');
@@ -82,55 +71,36 @@ export function ChatView({ file, onBack }: ChatViewProps) {
     setIsLoading(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          history: messages,
+          fileName: file.name
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      const data = await response.json();
       
-      // Build history for context
-      const history = messages.map((m, index) => {
-        const parts: any[] = [];
-        if (index === 0 && m.role === 'user') {
-          parts.push({
-            inlineData: {
-              data: base64Data,
-              mimeType: file.type || 'application/pdf'
-            }
-          });
-        }
-        parts.push({ text: m.text });
-        return {
-          role: m.role,
-          parts
-        };
-      });
+      // Extract response text from n8n payload
+      let replyText = "Received response from n8n.";
+      if (data.text) replyText = data.text;
+      else if (data.message) replyText = data.message;
+      else if (data.output) replyText = data.output;
+      else if (typeof data === 'string') replyText = data;
+      else replyText = JSON.stringify(data, null, 2);
 
-      const currentMessageParts: any[] = [];
-      if (messages.length === 0) {
-        currentMessageParts.push({
-          inlineData: {
-            data: base64Data,
-            mimeType: file.type || 'application/pdf'
-          }
-        });
-      }
-      currentMessageParts.push({ text: userMessage });
-
-      // Add the document to the current request
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [
-          ...history,
-          {
-            role: 'user',
-            parts: currentMessageParts
-          }
-        ]
-      });
-
-      if (response.text) {
-        setMessages(prev => [...prev, { role: 'model', text: response.text }]);
-      }
+      setMessages(prev => [...prev, { role: 'model', text: replyText }]);
     } catch (error) {
       console.error('Error generating response:', error);
-      setMessages(prev => [...prev, { role: 'model', text: 'Sorry, I encountered an error while processing your request.' }]);
+      setMessages(prev => [...prev, { role: 'model', text: 'Sorry, I encountered an error communicating with n8n.' }]);
     } finally {
       setIsLoading(false);
     }
@@ -244,11 +214,11 @@ export function ChatView({ file, onBack }: ChatViewProps) {
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                 placeholder="Ask a question..."
                 className="w-full pl-4 pr-12 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#ff5a1f] focus:border-transparent"
-                disabled={isLoading || !base64Data}
+                disabled={isLoading}
               />
               <button
                 onClick={handleSend}
-                disabled={isLoading || !input.trim() || !base64Data}
+                disabled={isLoading || !input.trim()}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-[#ff5a1f] disabled:opacity-50 transition-colors"
               >
                 <Send className="w-5 h-5" />

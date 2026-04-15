@@ -15,6 +15,8 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  app.use(express.json());
+
   // API route to proxy webhook to n8n
   app.post('/api/webhook', upload.single('file'), async (req, res) => {
     try {
@@ -54,6 +56,44 @@ async function startServer() {
       res.json({ success: true });
     } catch (error) {
       console.error('Error proxying to n8n webhook:', error);
+      res.status(500).json({ error: 'Failed to trigger n8n webhook', details: String(error) });
+    }
+  });
+
+  // API route to proxy chat messages to n8n
+  app.post('/api/chat', async (req, res) => {
+    try {
+      let webhookUrl = process.env.VITE_N8N_WEBHOOK_URL;
+      
+      if (!webhookUrl) {
+        return res.status(500).json({ error: 'VITE_N8N_WEBHOOK_URL is not configured' });
+      }
+
+      webhookUrl = webhookUrl.replace(/^["']|["']$/g, '').trim();
+
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(req.body),
+      });
+
+      if (!response.ok) {
+        console.error(`n8n chat webhook failed with status: ${response.status} ${response.statusText}`);
+        return res.status(response.status).json({ error: `n8n webhook failed: ${response.statusText}` });
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+        res.json(data);
+      } else {
+        const text = await response.text();
+        res.json({ text });
+      }
+    } catch (error) {
+      console.error('Error proxying chat to n8n webhook:', error);
       res.status(500).json({ error: 'Failed to trigger n8n webhook', details: String(error) });
     }
   });
