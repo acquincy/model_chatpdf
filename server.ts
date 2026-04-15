@@ -1,7 +1,6 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import multer from 'multer';
-import FormData from 'form-data';
 import path from 'path';
 import dotenv from 'dotenv';
 
@@ -20,29 +19,31 @@ async function startServer() {
   app.post('/api/webhook', upload.single('file'), async (req, res) => {
     try {
       // The webhook URL should be set in the environment
-      const webhookUrl = process.env.VITE_N8N_WEBHOOK_URL;
+      let webhookUrl = process.env.VITE_N8N_WEBHOOK_URL;
       
       if (!webhookUrl) {
         return res.status(500).json({ error: 'VITE_N8N_WEBHOOK_URL is not configured' });
       }
 
+      // Clean up quotes if they were accidentally included
+      webhookUrl = webhookUrl.replace(/^["']|["']$/g, '').trim();
+
       if (!req.file) {
         return res.status(400).json({ error: 'No file provided' });
       }
 
+      // Use native Node 18+ FormData and Blob
       const formData = new FormData();
-      formData.append('file', req.file.buffer, {
-        filename: req.file.originalname,
-        contentType: req.file.mimetype,
-      });
+      const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
+      
+      formData.append('file', blob, req.file.originalname);
       formData.append('filename', req.body.filename || req.file.originalname);
       formData.append('timestamp', req.body.timestamp || new Date().toISOString());
 
       const response = await fetch(webhookUrl, {
         method: 'POST',
-        body: formData as any,
-        // FormData from 'form-data' package sets its own headers
-        headers: formData.getHeaders(),
+        body: formData,
+        // Do NOT set Content-Type header manually; native fetch sets it with the correct boundary
       });
 
       if (!response.ok) {
@@ -53,7 +54,7 @@ async function startServer() {
       res.json({ success: true });
     } catch (error) {
       console.error('Error proxying to n8n webhook:', error);
-      res.status(500).json({ error: 'Failed to trigger n8n webhook' });
+      res.status(500).json({ error: 'Failed to trigger n8n webhook', details: String(error) });
     }
   });
 
