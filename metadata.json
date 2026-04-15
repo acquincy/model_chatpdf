@@ -1,0 +1,6 @@
+{
+  "name": "Chat with PDF",
+  "description": "Upload a PDF document and chat with it using AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
