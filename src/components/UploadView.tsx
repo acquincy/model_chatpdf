@@ -10,31 +10,6 @@ export function UploadView({ onFileUpload }: UploadViewProps) {
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
       const file = acceptedFiles[0];
-      
-      // Trigger n8n webhook via our backend proxy
-      const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_URL;
-      if (webhookUrl) {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('filename', file.name);
-        formData.append('timestamp', new Date().toISOString());
-
-        fetch('/api/webhook', {
-          method: 'POST',
-          body: formData,
-        })
-        .then(response => {
-          if (!response.ok) {
-            console.error(`n8n webhook failed with status: ${response.status} ${response.statusText}`);
-          } else {
-            console.log('n8n webhook triggered successfully');
-          }
-        })
-        .catch(err => {
-          console.error('Failed to trigger n8n webhook via proxy.', err);
-        });
-      }
-
       onFileUpload(file);
     }
   }, [onFileUpload]);
