@@ -3,7 +3,11 @@ import { createServer as createViteServer } from 'vite';
 import multer from 'multer';
 import FormData from 'form-data';
 import path from 'path';
-import 'dotenv/config';
+import dotenv from 'dotenv';
+
+// Load environment variables, falling back to .env.example if needed
+dotenv.config();
+dotenv.config({ path: '.env.example' });
 
 // Use memory storage for multer
 const upload = multer({ storage: multer.memoryStorage() });

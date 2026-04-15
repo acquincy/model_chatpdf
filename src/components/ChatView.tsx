@@ -47,29 +47,28 @@ export function ChatView({ file, onBack }: ChatViewProps) {
   const handleUpload = async () => {
     setUploadStatus('uploading');
     try {
-      const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_URL;
-      if (webhookUrl) {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('filename', file.name);
-        formData.append('timestamp', new Date().toISOString());
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('filename', file.name);
+      formData.append('timestamp', new Date().toISOString());
 
-        const response = await fetch('/api/webhook', {
-          method: 'POST',
-          body: formData,
-        });
+      const response = await fetch('/api/webhook', {
+        method: 'POST',
+        body: formData,
+      });
 
-        if (!response.ok) {
-          console.error(`n8n webhook failed with status: ${response.status} ${response.statusText}`);
-          setUploadStatus('error');
-          return;
-        }
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error(`Webhook failed: ${response.status} ${response.statusText}`, errorData);
+        setUploadStatus('error');
+        return;
       }
+      
       setUploadStatus('success');
       setShowSuccessBanner(true);
       setTimeout(() => setShowSuccessBanner(false), 5000); // Hide banner after 5s
     } catch (err) {
-      console.error('Failed to trigger n8n webhook via proxy.', err);
+      console.error('Failed to trigger webhook via proxy.', err);
       setUploadStatus('error');
     }
   };
